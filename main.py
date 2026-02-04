@@ -15,32 +15,45 @@ from typing import Dict, Any
 from VALOR.config import MODEL_CONFIGS
 from VALOR.data.generators import create_synthetic_data, set_random_seed
 from VALOR.data.loaders import prepare_data
-from VALOR.models.baselines import SLearner, TLearner, TARNet, DragonNet, UniTE, EUEN
-from VALOR.models.valor import VALOR_TARNet, VALOR_DragonNet, VALOR_UniTE
+from VALOR.models.baselines import TLearner, TARNet, DragonNet, UniTE, EUEN, CFRNet, CFRNetWass, CausalForestLearner
+from VALOR.models.valor import VALOR_TARNet, VALOR_DragonNet, VALOR_UniTE, VALOR_EUEN
+from VALOR.models.rerum import RERUM
 from VALOR.models.trees import ZILNForestLearner
 from VALOR.training.trainers import train_epoch, validate
 
 
 def get_model(model_name: str, config: Any, prior_log_mean: float = 1.0):
     """Factory function to instantiate the requested model."""
-    if model_name == 'slearner':
-        return SLearner(config)
-    elif model_name == 'tlearner':
+    if model_name == 'tlearner':
         return TLearner(config)
     elif model_name == 'tarnet':
         return TARNet(config)
     elif model_name == 'dragonnet':
         return DragonNet(config)
+    elif model_name == 'cfrnet':
+        return CFRNet(config)
+    elif model_name == 'cfrnet_wass':
+        return CFRNetWass(config)
     elif model_name == 'unite':
         return UniTE(config)
     elif model_name == 'euen':
         return EUEN(config)
+    elif model_name == 'causal_forest':
+        return CausalForestLearner(
+            n_estimators=config.n_estimators,
+            max_depth=config.max_depth,
+            min_samples_leaf=config.min_samples_leaf
+        )
+    elif model_name == 'rerum':
+        return RERUM(config)
     elif model_name == 'valor_tarnet':
         return VALOR_TARNet(config, prior_log_mean)
     elif model_name == 'valor_dragonnet':
         return VALOR_DragonNet(config, prior_log_mean)
     elif model_name == 'valor_unite':
         return VALOR_UniTE(config, prior_log_mean)
+    elif model_name == 'valor_euen':
+        return VALOR_EUEN(config, prior_log_mean)
     elif model_name == 'ziln_forest':
         return ZILNForestLearner(
             n_estimators=config.n_estimators,
@@ -58,7 +71,7 @@ def main():
     parser.add_argument('--dataset', type=str, default='synthetic', help='Dataset to use')
     parser.add_argument('--runs', type=int, default=1, help='Number of independent runs')
     parser.add_argument('--epochs', type=int, default=30, help='Number of epochs')
-    parser.add_argument('--sample', action='store_true', help='Run on 10%% sample for debugging')
+    parser.add_argument('--sample', action='store_true', help='Run on 10% sample for debugging')
     args = parser.parse_args()
 
     # 1. Load Config
@@ -92,9 +105,9 @@ def main():
                     setattr(self, k, v)
                 self.input_dim = input_dim
                 self.use_gpu = torch.cuda.is_available()
+                self.device = torch.device("cuda" if self.use_gpu else "cpu")
         
         config = SimpleConfig(model_cfg_dict, input_dim)
-        if args.model == 'slearner': config.input_dim += 1
 
         # Prior for ZILN
         pos_labels = df[df['label'] > 0]['label']
@@ -102,7 +115,7 @@ def main():
 
         model = get_model(args.model, config, prior_log_mean)
         
-        if args.model == 'ziln_forest':
+        if args.model in ['ziln_forest', 'causal_forest']:
             # Tree-based model fit
             X_train = []
             y_train = []
