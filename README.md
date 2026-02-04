@@ -52,7 +52,7 @@ python main.py --model valor_tarnet --dataset synthetic --runs 5
 
 ## Key Features
 
-- **ZILN Loss**: Specifically designed to handle zero-inflated continuous outcomes like revenue.
+- **Focal-ZILN Loss**: Specifically designed to handle zero-inflated continuous outcomes like revenue.
 - **Treatment-Gated Interaction (GTI)**: A mechanism to learn feature interactions that are sensitive to treatment assignment.
 - **Value-Weighted Ranking Loss**: Optimizes the ranking of users by their expected revenue uplift.
 - **Bayesian Smoothing**: Used in ZILN Forest to handle sparse data in tree leaves.
