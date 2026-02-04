@@ -57,7 +57,8 @@ def generate_dataframe(
         columns.append('data_cluster')
         data.append(cluster_labels.reshape(-1, 1))
 
-    return pd.DataFrame(np.column_stack(data), columns=columns)
+    df = pd.DataFrame(np.column_stack(data), columns=columns)
+    return df
 
 
 def create_synthetic_data(
@@ -78,12 +79,14 @@ def create_synthetic_data(
     print("Generating Synthetic Data (ZILN Compatible)...")
     set_random_seed(seed)
 
+    # 1. Create User (UID) Data
     df_uid = generate_dataframe(
         n_samples=n_uid, n_binary=23, p_binary=0.5,
         n_continuous=83, mean_gaussian=0, std_gaussian=1,
         n_classes=10, str_name='uid'
     )
 
+    # 2. Create Product (PID) Data
     df_pid = generate_dataframe(
         n_samples=n_pid, n_binary=0, p_binary=0.5,
         n_continuous=106, mean_gaussian=0, std_gaussian=1,
@@ -93,6 +96,7 @@ def create_synthetic_data(
     df_uid_columns = df_uid.columns
     df_pid_columns = df_pid.columns
 
+    # 3. Join logic (User-Context Interaction)
     joined_data = []
     for _, row in df_uid.iterrows():
         n = np.random.randint(30, 60)
@@ -103,6 +107,7 @@ def create_synthetic_data(
 
     result_df = pd.concat(joined_data, ignore_index=True)
 
+    # 4. Generate Outcome (ZILN Distribution)
     u_id_sum = result_df[df_uid_columns].sum(axis=1)
     p_id_sum = result_df[df_pid_columns].sum(axis=1)
     u_id_squared_sum = result_df[df_uid_columns].pow(2).sum(axis=1)
@@ -114,18 +119,18 @@ def create_synthetic_data(
     feat_user = normalize(u_id_squared_sum)
     feat_item = normalize(p_id_sum)
 
-    # Propensity Generation
+    # --- A. Propensity (Gate) Generation ---
     base_logits = -0.5 + 0.5 * feat_user + 0.2 * feat_item
     prob_c = 1 / (1 + np.exp(-base_logits))
     prob_t = 1 / (1 + np.exp(-(base_logits + 0.3 + 0.1 * feat_interaction)))
 
-    # Revenue Generation (Mu)
+    # --- B. Revenue (Mu) Generation ---
     base_mu = 3.0 + 0.3 * feat_interaction + 0.2 * feat_user
     mu_c = base_mu
     mu_t = base_mu + 0.2 + 0.2 * feat_interaction
     sigma = 0.5
 
-    # Sample Outcomes
+    # --- C. Sample Outcomes ---
     conv_c = np.random.binomial(1, prob_c)
     conv_t = np.random.binomial(1, prob_t)
     rev_c = np.exp(np.random.normal(mu_c, sigma))
@@ -134,11 +139,12 @@ def create_synthetic_data(
     y0 = conv_c * rev_c
     y1 = conv_t * rev_t
 
-    # True Tau (Expected Value Difference)
+    # --- D. Calculate True Tau (Expected Value Difference) ---
     ev_c = prob_c * np.exp(mu_c + 0.5 * sigma**2)
     ev_t = prob_t * np.exp(mu_t + 0.5 * sigma**2)
     true_tau = ev_t - ev_c
 
+    # Assign to DataFrame
     result_df['y0'] = y0
     result_df['y1'] = y1
     result_df['true_tau'] = true_tau
@@ -146,4 +152,5 @@ def create_synthetic_data(
     result_df['label'] = np.where(result_df['treatment'] == 0, result_df['y0'], result_df['y1'])
 
     print(f"Data Generated. Shape: {result_df.shape}")
+    print(f"Sparsity: {(result_df['label'] == 0).mean():.2%}")
     return result_df
